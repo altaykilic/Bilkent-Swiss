@@ -176,92 +176,24 @@ Tournament Tournament::read_trf_file(const std::string& path){
             t.max_rounds = std::stoi(line.substr(4));
         }
         else if(data_identification_number == "001") {
-            int starting_rank = std::stoi(line.substr(4, 4));
-            // std::string sex = line.substr(9, 1);
-            // std::string fide_title = line.substr(10, 3);
+            // Only the initial configuration is restored: name and rating.
+            // Points and per-round results are deliberately discarded, so a
+            // file saved mid-tournament loads back as a fresh player list.
+            // Note the writer still emits them, since create_pairing feeds the
+            // same format to bbpPairings, which needs the round history.
             // The name column is space-padded to a fixed width; trim it, or
             // every loaded player keeps trailing blanks in their name.
             std::string name = line.substr(14, 32);
             size_t name_end = name.find_last_not_of(' ');
             name = (name_end == std::string::npos) ? "" : name.substr(0, name_end + 1);
+            // Throws on a short or non-numeric line, which is how a non-TRF
+            // file is rejected by the caller.
             int fide_rating = std::stoi(line.substr(48, 4));
-            // std::string federation = line.substr(53, 3);
-            // int fide_id = std::stoi(line.substr(57, 11));
-            // std::string birth_date = line.substr(69, 10);
-            int points = (int)(2 * std::stof(line.substr(80, 4)));
-            // int rank = std::stoi(line.substr(85, 4));
 
-            Player p(name, fide_rating);
-            p.id = starting_rank;
-            p.points = points;
-
-            int end_idx = 98, idx = 0;
-            while(end_idx < (int)line.size()){
-                idx++;
-                int start_idx = end_idx - 7;
-                std::string opponent_string = line.substr(start_idx, 4);
-                start_idx += 5;
-                char color = line.substr(start_idx, 1)[0];
-                start_idx += 2;
-                char result = line.substr(start_idx, 1)[0];
-                start_idx += 3;
-
-                // TODO: create matches
-                Match m;
-                m.round = idx;
-                if(opponent_string == "    " || opponent_string == "0000"){
-                    m.white_player_id = starting_rank;
-                    m.black_player_id = -1;
-                    if(result == 'h' || result == 'H')
-                        m.game_result = MatchResult::HALF_POINT_BYE;
-                    else if(result == 'f' || result == 'F')
-                        m.game_result = MatchResult::FULL_POINT_BYE;
-                    else if(result == 'u' || result == 'U')
-                        m.game_result = MatchResult::PAIRING_ALLOCATED_BYE;
-                    else if(result == 'z' || result == 'Z' || result == ' ')
-                        m.game_result = MatchResult::UNMATCHED;
-                    p.player_matches.push_back(m);
-                    end_idx += 10;
-                    continue;
-                }
-                int opponent = std::stoi(opponent_string);
-                bool color_bool = (color == 'w' || color == 'W');
-                if(color == 'w' || color == 'W'){
-                    m.white_player_id = starting_rank;
-                    m.black_player_id = opponent;
-                }
-                else if(color == 'b' || color == 'B'){
-                    m.white_player_id = opponent;
-                    m.black_player_id = starting_rank;
-                }
-                
-                // Result 
-                if(result == '-')
-                    m.game_result = color_bool ? MatchResult::FORFEIT_BLACK_WIN : MatchResult::FORFEIT_WHITE_WIN;
-                else if(result == '+')
-                    m.game_result = color_bool ? MatchResult::FORFEIT_WHITE_WIN : MatchResult::FORFEIT_BLACK_WIN;
-                else if(result == 'w' || result == 'W')
-                    m.game_result = color_bool ? MatchResult::UNRATED_WHITE_WIN : MatchResult::UNRATED_BLACK_WIN;
-                else if(result == 'd' || result == 'D')
-                    m.game_result = MatchResult::UNRATED_DRAW;
-                else if(result == 'l' || result == 'L')
-                    m.game_result = color_bool ? MatchResult::UNRATED_BLACK_WIN : MatchResult::UNRATED_WHITE_WIN;
-                else if(result == '1')
-                    m.game_result = color_bool ? MatchResult::REGULAR_WHITE_WIN : MatchResult::REGULAR_BLACK_WIN;
-                else if(result == '=')
-                    m.game_result = MatchResult::REGULAR_DRAW;
-                else if(result == '0')
-                    m.game_result = color_bool ? MatchResult::REGULAR_BLACK_WIN : MatchResult::REGULAR_WHITE_WIN;
-
-                p.player_matches.push_back(m);
-                end_idx += 10;
-            }
-            if(t.round != 0)
-                t.round = std::min(idx, t.round);
-            else
-                t.round = idx;
-
-            t.player_list.push_back(p);
+            // The file's starting rank is not reused as the player id: ids come
+            // from Player's counter, so they cannot collide with players added
+            // after the load.
+            t.player_list.push_back(Player(name, fide_rating));
         }
         else if(data_identification_number == "012") {
             t.tournament_name = line.substr(4);
@@ -304,9 +236,8 @@ Tournament Tournament::read_trf_file(const std::string& path){
         }
     }
 
-    // TODO: Validate tournament, especially match results. Also, set FORFEIT_BOTHs;
-    if(t.round > 0)
-        t.start_tournament();
+    // round stays 0: a loaded file is always an unstarted tournament, so there
+    // is nothing to start here.
     return t;
 }
 
