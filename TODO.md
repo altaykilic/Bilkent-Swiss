@@ -5,7 +5,7 @@
 - **[DONE, implemented BH-C1, SB, AOB]** [IMPORTANT] Implement tie-breaker systems
 - **[DONE, gotta use 1]** Add a way to update results of previous pairings
 - **[DONE]** Save and load tournament config
-- Save pairing page as .png
+- **[DONE]** Save pairing page as .png
 
 ## TODO: Testing
 - Changing player names

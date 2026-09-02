@@ -2,7 +2,7 @@
 CC = g++-15
 CFLAGS = -Wall -O2
 IFLAGS = -I$(IMGUI_DIR) -I$(IMGUI_BACKEND_DIR) -Iinclude -Iexternal/ImGuiFileDialog
-LFLAGS = -lSDL2 -lsdl2main
+LFLAGS = -lSDL2 -lsdl2main -lSDL2_image
 
 # Directories
 SRC_DIR = src

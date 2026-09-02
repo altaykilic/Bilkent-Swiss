@@ -16,6 +16,9 @@ bin/
 # Ignore saved tournament configs default directory
 configs/
 
+# Ignore exported pairing/ranking images
+exports/
+
 # Ignore temporary or log files
 imgui.ini
 round.txt

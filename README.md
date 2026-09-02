@@ -8,12 +8,13 @@ This is a tournament manager, made mostly for local use.
 - `make` and a C++ compiler. The Makefile is set to `g++-15` (see `CC` in the
   Makefile); change it if your compiler is named differently.
 - [SDL2](https://www.libsdl.org/) development libraries.
+- SDL2_image, used to write the exported pairing/ranking PNGs.
 - `git`, to fetch the submodules.
 
 On macOS with Homebrew:
 
 ```sh
-brew install sdl2 gcc make
+brew install sdl2 sdl2_image gcc make
 ```
 
 ### 1. Clone with submodules
