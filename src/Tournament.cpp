@@ -8,7 +8,7 @@
 #include "../include/Tournament.h"
 #include "../include/Match.h"
 
-Tournament::Tournament() : round(0), tournament_started(false) {
+Tournament::Tournament() : round(0), max_rounds(0), tournament_started(false) {
 
 }
 
@@ -163,7 +163,9 @@ Tournament Tournament::read_trf_file(const std::string& path){
 
     // Interpret.
     for(const std::string& line: file_lines) {
-        if(line.size() < 3)
+        // Every DIN line we parse is at least 5 chars ("XXR 9"); shorter
+        // lines are blank or truncated, and substr(4) would throw on them.
+        if(line.size() < 5)
             continue;
 
         std::string data_identification_number = line.substr(0, 3); 
@@ -177,7 +179,11 @@ Tournament Tournament::read_trf_file(const std::string& path){
             int starting_rank = std::stoi(line.substr(4, 4));
             // std::string sex = line.substr(9, 1);
             // std::string fide_title = line.substr(10, 3);
+            // The name column is space-padded to a fixed width; trim it, or
+            // every loaded player keeps trailing blanks in their name.
             std::string name = line.substr(14, 32);
+            size_t name_end = name.find_last_not_of(' ');
+            name = (name_end == std::string::npos) ? "" : name.substr(0, name_end + 1);
             int fide_rating = std::stoi(line.substr(48, 4));
             // std::string federation = line.substr(53, 3);
             // int fide_id = std::stoi(line.substr(57, 11));
@@ -311,10 +317,20 @@ void Tournament::start_tournament(){
     create_initial_ordering();
 }
 
-void Tournament::create_trf_file(){
-    std::ofstream output_trf("out.trf");
+bool Tournament::create_trf_file(const std::string& path){
+    std::ofstream output_trf(path);
+    if(!output_trf.is_open())
+        return false;
 
-    output_trf << "XXC white1\n";
+    // DIN + space + value; read_trf_file reads the value as line.substr(4).
+    // Empty fields are skipped: they would emit a 4-char line, and the reader
+    // only accepts lines of length 5 or more.
+    if(!tournament_name.empty()) output_trf << "012 " << tournament_name << "\n";
+    if(!tournament_city.empty()) output_trf << "022 " << tournament_city << "\n";
+    if(!federation.empty())      output_trf << "032 " << federation      << "\n";
+    if(!chief_arbiter.empty())   output_trf << "102 " << chief_arbiter   << "\n";
+
+    output_trf << "XXC " << (first_table_white ? "white1" : "black1") << "\n";
     output_trf << "XXR " << max_rounds << "\n";
 
     int idx = 1;
@@ -323,7 +339,7 @@ void Tournament::create_trf_file(){
         output_trf << std::right << std::setw(4) << idx << " ";
         output_trf << "m";
         output_trf << std::left << std::setw(3) << "   " << " "; // FOR FIDE TITLE
-        output_trf << std::left << std::setw(33) << player.name << " ";
+        output_trf << std::left << std::setw(33) << player.name.substr(0, 32) << " ";
         output_trf << std::left << std::setw(4) << player.rating << " ";
         output_trf << std::left << std::setw(3) << "TUR" << " "; // FOR FIDE FEDERATION
         output_trf << std::right << std::setw(11) << "00000000" << " "; // FIDE ID
@@ -361,6 +377,9 @@ void Tournament::create_trf_file(){
         idx++;
         output_trf << "\n";
     }
+
+    output_trf.close();
+    return output_trf.good();
 }
 
 void Tournament::create_pairing(){

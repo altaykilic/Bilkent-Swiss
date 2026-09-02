@@ -5,6 +5,9 @@
 #include <SDL2/SDL.h>
 #include <iostream>
 #include <cstring>
+#include <cctype>
+#include <fstream>
+#include <filesystem>
 
 #include "Tournament.h"
 
@@ -22,6 +25,9 @@ struct StateVariables{
     int pairing_selected_idx = -1;
 
     int UI_round = 0;
+
+    bool show_error = false;
+    std::string error_message;
 };
 
 int initialize(SDL_Renderer*& renderer, SDL_Window*& window, ImGuiIO& io){
@@ -73,15 +79,99 @@ Tournament load_tournament(char tournament_name[], char city[],
     return t;
 }
 
-void load_trf_file(Tournament& t, StateVariables& sv, std::string& trf_path){
+bool load_trf_file(Tournament& t, StateVariables& sv, const std::string& trf_path){
+    std::ifstream probe(trf_path);
+    if(!probe.is_open()){
+        sv.error_message = "Could not open file:\n" + trf_path;
+        sv.show_error = true;
+        return false;
+    }
+    probe.close();
+
+    // read_trf_file indexes fixed columns and calls stoi/stof without
+    // validating them, so anything that is not a TRF file throws. Parse into a
+    // temporary first, so a bad file cannot destroy the loaded tournament.
+    Tournament candidate;
+    try {
+        candidate = Tournament::read_trf_file(trf_path);
+    }
+    catch(const std::exception& e){
+        sv.error_message = "Not a valid TRF file:\n" + trf_path + "\n\n" + e.what();
+        sv.show_error = true;
+        return false;
+    }
+    if(candidate.player_list.empty() && candidate.tournament_name.empty()){
+        sv.error_message = "Not a valid TRF file:\n" + trf_path;
+        sv.show_error = true;
+        return false;
+    }
+
+    t = candidate;
     sv.player_selected_idx = -1;
     sv.pairing_selected_idx = -1;
-    t = Tournament::read_trf_file(trf_path);
     sv.tournament_loaded = true;
-    if(t.round > 0)
-        sv.tournament_started = true;
-    else
-        sv.tournament_started = false;
+    sv.tournament_started = (t.round > 0);
+    sv.UI_round = 0;
+    sv.pairing_online = false;
+    return true;
+}
+
+void save_trf_file(Tournament& t, StateVariables& sv, const std::string& trf_path){
+    if(!t.create_trf_file(trf_path)){
+        sv.error_message = "Could not write tournament to:\n" + trf_path;
+        sv.show_error = true;
+    }
+}
+
+std::string default_trf_filename(const Tournament& t){
+    std::string name = t.tournament_name;
+    for(char& c : name){
+        if(!std::isalnum((unsigned char)c) && c != '-' && c != '_')
+            c = '_';
+    }
+    if(name.empty())
+        name = "tournament";
+    return name + ".trf";
+}
+
+// Saved tournaments live here. The directory is gitignored, so a fresh clone
+// will not have it; create it on demand instead of opening the dialog on a
+// path that does not exist.
+static const char* CONFIG_DIR = "configs";
+
+void ensure_config_dir(){
+    std::error_code ec;
+    std::filesystem::create_directories(CONFIG_DIR, ec);
+}
+
+// Single entry points, shared by the File menu items and the Edit Tournament buttons.
+void open_load_dialog(){
+    ensure_config_dir();
+    IGFD::FileDialogConfig config;
+    config.path = CONFIG_DIR;
+    config.countSelectionMax = 1;
+    ImGuiFileDialog::Instance()->OpenDialog("LoadTRF", "Load Tournament", ".trf", config);
+}
+
+void open_save_dialog(const Tournament& t){
+    ensure_config_dir();
+    IGFD::FileDialogConfig config;
+    config.path = CONFIG_DIR;
+    config.fileName = default_trf_filename(t);
+    config.countSelectionMax = 1;
+    config.flags = ImGuiFileDialogFlags_ConfirmOverwrite;
+    ImGuiFileDialog::Instance()->OpenDialog("SaveTRF", "Save Tournament", ".trf", config);
+}
+
+void show_error_window(StateVariables& sv){
+    ImGui::SetNextWindowPos(ImVec2(ImGui::GetIO().DisplaySize.x / 2, ImGui::GetIO().DisplaySize.y / 2), ImGuiCond_Appearing, ImVec2(0.5f,0.5f));
+    ImGui::SetNextWindowSize(ImVec2(ImGui::GetIO().DisplaySize.x / 3, 0));
+    ImGui::Begin("Error", &sv.show_error, ImGuiWindowFlags_NoResize);
+    ImGui::TextWrapped("%s", sv.error_message.c_str());
+    ImGui::Separator();
+    if(ImGui::Button("OK", ImVec2(-FLT_MIN, 0)))
+        sv.show_error = false;
+    ImGui::End();
 }
 
 void show_create_tournament_window(Tournament& t, StateVariables& sv){
@@ -352,7 +442,11 @@ void show_initial_ranking_listing(Tournament& tournament, StateVariables& sv){
 void show_pairing_listing(Tournament& tournament, StateVariables& sv){
     bool hovered = false;
     if (ImGui::BeginTabItem("Pairings")){
-        if(tournament.round > 0){
+        // A loaded tournament has round > 0 but an empty pairing_history,
+        // since read_trf_file does not rebuild it.
+        if(tournament.round > 0
+            && sv.UI_round >= 1
+            && (int)tournament.pairing_history.size() >= sv.UI_round){
             float windowWidth = ImGui::GetWindowSize().x;
             ImVec2 textSize = ImGui::CalcTextSize(tournament.tournament_name.c_str());
             float textX = (windowWidth - textSize.x) * 0.5f;
@@ -557,24 +651,12 @@ int main(){
             if (ImGui::BeginMenuBar()){ 
                 if (ImGui::BeginMenu("File")){
                     // Load TRF file.
-                    if(ImGui::MenuItem("Load Tournament", "Ctrl-O")){
-                        IGFD::FileDialogConfig config;
-	                    config.path = ".";
-                        config.countSelectionMax = 1;
-                        ImGuiFileDialog::Instance()->OpenDialog("LoadTRF", "Choose File", ".trf", config);
-                    }       
-                    ImGui::MenuItem("Save Tournament", "Ctrl-S");       // Save as TRF.
+                    if(ImGui::MenuItem("Load Tournament", "Ctrl-O"))
+                        open_load_dialog();
+                    // Save as TRF.
+                    if(ImGui::MenuItem("Save Tournament", "Ctrl-S", false, sv.tournament_loaded))
+                        open_save_dialog(tournament);
                     ImGui::EndMenu();
-                }
-                if (ImGuiFileDialog::Instance()->Display("LoadTRF")) {
-                    if (ImGuiFileDialog::Instance()->IsOk()) { // action if OK
-                        std::string file_path_name = ImGuiFileDialog::Instance()->GetFilePathName();
-                        // std::string file_path = ImGuiFileDialog::Instance()->GetCurrentPath();
-                        load_trf_file(tournament, sv, file_path_name);
-                    }
-                    
-                    // close
-                    ImGuiFileDialog::Instance()->Close();
                 }
                 ImGui::EndMenuBar();
             }
@@ -633,6 +715,19 @@ int main(){
                     if(ImGui::Button("Create New Tournament", ImVec2(-FLT_MIN, 30))){
                         sv.show_create_tournament = true;
                     }
+
+                    if(ImGui::Button("Load Tournament", ImVec2(-FLT_MIN, 30)))
+                        open_load_dialog();
+
+                    // Save stays available once a tournament is started, so it
+                    // gets its own scope rather than joining the one below.
+                    bool disable_save = !sv.tournament_loaded;
+                    if(disable_save)
+                        ImGui::BeginDisabled();
+                    if(ImGui::Button("Save Tournament", ImVec2(-FLT_MIN, 30)))
+                        open_save_dialog(tournament);
+                    if(disable_save)
+                        ImGui::EndDisabled();
 
                     if(!sv.tournament_loaded)
                         ImGui::BeginDisabled();
@@ -847,6 +942,28 @@ int main(){
             ImGui::EndChild();  
             ImGui::End();
         }
+
+        // Without a size constraint the dialog opens collapsed to its minimum
+        // the first time, before imgui.ini has an entry for it.
+        ImVec2 file_dialog_min(ImGui::GetIO().DisplaySize.x * 0.5f,
+                               ImGui::GetIO().DisplaySize.y * 0.5f);
+
+        if (ImGuiFileDialog::Instance()->Display("LoadTRF", ImGuiWindowFlags_NoCollapse, file_dialog_min)) {
+            if (ImGuiFileDialog::Instance()->IsOk())
+                load_trf_file(tournament, sv, ImGuiFileDialog::Instance()->GetFilePathName());
+            ImGuiFileDialog::Instance()->Close();
+        }
+
+        if (ImGuiFileDialog::Instance()->Display("SaveTRF", ImGuiWindowFlags_NoCollapse, file_dialog_min)) {
+            // GetFilePathName defaults to IGFD_ResultMode_AddIfNoFileExt, which
+            // appends ".trf" when the typed name has no extension.
+            if (ImGuiFileDialog::Instance()->IsOk())
+                save_trf_file(tournament, sv, ImGuiFileDialog::Instance()->GetFilePathName());
+            ImGuiFileDialog::Instance()->Close();
+        }
+
+        if(sv.show_error)
+            show_error_window(sv);
 
         if(sv.show_create_tournament)
             show_create_tournament_window(tournament, sv);

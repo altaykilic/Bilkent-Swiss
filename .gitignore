@@ -13,6 +13,9 @@ bin/
 # Ignore Visual Studio Code settings
 .vscode/
 
+# Ignore saved tournament configs default directory
+configs/
+
 # Ignore temporary or log files
 imgui.ini
 round.txt
