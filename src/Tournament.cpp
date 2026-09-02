@@ -371,10 +371,7 @@ void Tournament::create_pairing(){
     if(result != 0){
         std::cerr << "Error: could not run the pairing engine.\n"
                   << "  command: " << command << "\n"
-                  << "  status:  " << result << "\n"
-                  << "Make sure bbpPairings.exe has been built and placed in ./bin/, "
-                     "and that this program is run from the project root.\n"
-                     "See the Building section of README.md for details.\n";
+                  << "  status:  " << result << "\n";
         std::exit(EXIT_FAILURE);
     }
     
