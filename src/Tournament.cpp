@@ -382,7 +382,7 @@ bool Tournament::create_trf_file(const std::string& path){
     return output_trf.good();
 }
 
-void Tournament::create_pairing(){
+bool Tournament::create_pairing(){
     round++;
     create_trf_file();
     std::string command("./bin/bbpPairings.exe --dutch out.trf -p round.txt");
@@ -391,7 +391,11 @@ void Tournament::create_pairing(){
         std::cerr << "Error: could not run the pairing engine.\n"
                   << "  command: " << command << "\n"
                   << "  status:  " << result << "\n";
-        std::exit(EXIT_FAILURE);
+        // Returning rather than exiting, so an ongoing tournament is not lost.
+        // The round increment above has to be undone, or round and
+        // pairing_history desync and the next Finalize scores the wrong round.
+        round--;
+        return false;
     }
     
     std::vector<Match> cur_pairing;
@@ -420,6 +424,7 @@ void Tournament::create_pairing(){
         );
     }
     pairing_history.push_back(cur_pairing);
+    return true;
 }
 
 void Tournament::delete_current_pairing(){

@@ -770,17 +770,24 @@ int main(){
                     if(ponlinecopy)
                         ImGui::BeginDisabled();
                     if(ImGui::Button("Pair Next Round", ImVec2(-FLT_MIN, 30))){
-                        tournament.create_pairing();
-                        sv.UI_round = tournament.round;
-                        for(int i = 0; i < (int)tournament.player_list.size(); i++){
-                            if(tournament.player_list[i].active)
-                                continue;
-                            Match absent(tournament.round, tournament.player_list[i].id, 
-                                tournament.player_list[i].points, MatchResult::UNMATCHED
-                            );
-                            tournament.player_list[i].player_matches.push_back(absent);
+                        if(!tournament.create_pairing()){
+                            sv.error_message = "Could not run the pairing engine.\n\n"
+                                "Make sure bin/bbpPairings.exe exists and that the "
+                                "program is run from the project root.";
+                            sv.show_error = true;
                         }
-                        sv.pairing_online = true;
+                        else{
+                            sv.UI_round = tournament.round;
+                            for(int i = 0; i < (int)tournament.player_list.size(); i++){
+                                if(tournament.player_list[i].active)
+                                    continue;
+                                Match absent(tournament.round, tournament.player_list[i].id, 
+                                    tournament.player_list[i].points, MatchResult::UNMATCHED
+                                );
+                                tournament.player_list[i].player_matches.push_back(absent);
+                            }
+                            sv.pairing_online = true;
+                        }
                     }
                     if(ponlinecopy)
                         ImGui::EndDisabled();
