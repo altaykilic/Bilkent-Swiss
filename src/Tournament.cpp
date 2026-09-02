@@ -3,6 +3,7 @@
 #include <iomanip>
 #include <fstream>
 #include <numeric>
+#include <cstdlib>
 
 #include "../include/Tournament.h"
 #include "../include/Match.h"
@@ -368,7 +369,13 @@ void Tournament::create_pairing(){
     std::string command("./bin/bbpPairings.exe --dutch out.trf -p round.txt");
     int result = system(command.c_str());
     if(result != 0){
-       // Pairing not made
+        std::cerr << "Error: could not run the pairing engine.\n"
+                  << "  command: " << command << "\n"
+                  << "  status:  " << result << "\n"
+                  << "Make sure bbpPairings.exe has been built and placed in ./bin/, "
+                     "and that this program is run from the project root.\n"
+                     "See the Building section of README.md for details.\n";
+        std::exit(EXIT_FAILURE);
     }
     
     std::vector<Match> cur_pairing;
